@@ -7,7 +7,7 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "Jarvis Badgley <chiper@chipersoft.com> (http://chipersoft.com/)",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "slate-irc-parser": "0.0.2",
     "irc-replies": "^2.0.0"
@@ -15,5 +15,9 @@
   "devDependencies": {
     "blessed": "0.0.37",
     "rc": "^0.5.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ChiperSoft/ircsock.js.git"
   }
 }
