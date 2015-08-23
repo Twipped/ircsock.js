@@ -9,8 +9,7 @@
   "author": "Jarvis Badgley <chiper@chipersoft.com> (http://chipersoft.com/)",
   "license": "MIT",
   "dependencies": {
-    "slate-irc-parser": "0.0.2",
-    "irc-replies": "^2.0.0"
+    "slate-irc-parser": "0.0.2"
   },
   "devDependencies": {
     "blessed": "0.0.37",
