@@ -6,7 +6,7 @@ var sinon   = require('sinon');
 var Client = require('../../lib/client');
 
 test('simple connection negotiation', function (t) {
-	// t.plan(15);
+	t.plan(32);
 	var tp = {pass: t.pass, fail: t.fail};
 
 	var irc = new Client({
