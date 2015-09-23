@@ -1,140 +1,162 @@
 
+var assign = require('lodash.assign');
+
 module.exports = function () {
 	return function (irc) {
 		irc.channels = {};
 
 		irc.getChannel = function (channel, create) {
-			return this.channels[channel] || (create && (this.channels[channel] = {
-				users: []
-			}));
+			if (!channel) return;
+
+			channel = channel.toLowerCase();
+			if (!irc.channels[channel] && create) {
+				irc.channels[channel] = {
+					members: {}
+				};
+			}
+			return irc.channels[channel];
 		};
 
 		irc.on('join', function (ev) {
-			var channel = this.getChannel(ev.target, true);
-			channel.users[ev.nick] = {
+			var channel = irc.getChannel(ev.target, true);
+			channel.members[ev.nick] = {
 				nick: ev.nick,
 				host: ev.host
 			};
 		});
 
 		irc.on('part', function (ev) {
-			if (this.channels[ev.target] && this.channels[ev.target].users[ev.nick]) {
-				delete this.channels[ev.target].users[ev.nick];
+			var channel = irc.getChannel(ev.target);
+			if (!channel) {return;}
+
+			if (channel.members[ev.nick]) {
+				delete channel.members[ev.nick];
 			}
 		});
 
 		irc.on('part:self', function (ev) {
-			if (this.channels[ev.target]) {
-				delete this.channels[ev.target];
+			var channelName = ev.target.toLowerCase();
+
+			if (irc.channels[channelName]) {
+				delete irc.channels[channelName];
 			}
 		});
 
 		irc.on('kick', function (ev) {
-			if (ev.nick === this.nick) {
-				delete this.channels[ev.target];
-			} else if (this.channels[ev.target]) {
-				delete this.channels[ev.target].users[ev.nick];
+			var channelName = ev.target.toLowerCase();
+
+			if (ev.isSelf) {
+				delete irc.channels[channelName];
+			} else if (irc.channels[channelName]) {
+				delete irc.channels[channelName].members[ev.nick];
 			}
 		});
 
 		irc.on('quit', function (ev) {
 			// figure out what channels this user was in and extend the event.
-			var activeChannels = Object.keys(this.channels);
 			var inChannels = [];
-			var i = activeChannels.length, channelEvent;
-			while (i-- > 0) {
-				if (this.channels[activeChannels[i]].users[ev.nick]) {
-					inChannels.push(activeChannels[i]);
-					delete this.channels[activeChannels[i]].users[ev.nick];
+			var nick = ev.nick;
+			Object.keys(irc.channels).forEach(function (channelName) {
+				var channel = irc.getChannel(channelName);
 
-					channelEvent = Object.create(ev);
-					channelEvent.target = activeChannels[i];
-					this.emit('quit:channel', channelEvent);
+				if (channel.members[nick]) {
+					inChannels.push(channel);
+
+					delete channel.members[nick];
+
+					var channelEvent = assign({}, ev);
+					channelEvent.target = channelName;
+					irc.emit('quit:channel', channelEvent);
 				}
-			}
-			ev.targets = activeChannels;
+			});
+			ev.targets = inChannels;
 		});
 
 		irc.on('quit:self', function () {
-			this.channels = {};
+			irc.channels = {};
 		});
 
 		irc.on('names', function (ev) {
-			var channel = this.channels[ev.target];
+			var channel = irc.getChannel(ev.target);
+
 			if (!channel) {return;}
 
-			var i = ev.names.length, name, user;
-			while (i-- > 0) {
-				name = ev.names[i];
-				user = channel.users[name.nick] || (channel.users[name.nick] = {nick: name.nick});
-				user.isOperator = name.isOperator;
-				user.hasVoice = name.hasVoice;
-			}
+			ev.names.forEach(function (name) {
+				channel.members[name.nick] = assign(channel.members[name.nick] || {}, name);
+			});
 		});
 
 		irc.on('nick', function (ev) {
-			var activeChannels = Object.keys(this.channels), channel;
-			var user, channelEvent;
-			var i = activeChannels.length;
-			while (i-- > 0) {
-				channel = activeChannels[i];
-				if (this.channels[channel].users[ev.nick]) {
-					user = this.channels[channel].users[ev.nick];
-					delete this.channels[channel].users[ev.nick];
-					this.channels[channel].users[ev.newNick] = user;
+			var inChannels = [];
 
-					channelEvent = Object.create(ev);
-					channelEvent.target = channel;
-					this.emit('nick:channel', channelEvent);
+			Object.keys(irc.channels).forEach(function (channelName) {
+				var channel = irc.getChannel(channelName);
+
+				if (channel.members[ev.nick]) {
+					inChannels.push(channel);
+
+					var user = channel.members[ev.nick];
+					delete channel.members[ev.nick];
+					channel.members[ev.newNick] = user;
+
+					var channelEvent = assign({}, ev);
+					channelEvent.target = channelName;
+					irc.emit('nick:channel', channelEvent);
 				}
-			}
+			});
+
+			ev.targets = inChannels;
 		});
 
 		irc.on('privmsg', function (ev) {
-			var channel = this.channels[ev.target];
-			if (!channel) {return;}
+			var channel = irc.getChannel(ev.target);
+			if (!channel) return;
 
-			var user = channel.users[name.nick] || (channel.users[name.nick] = {nick: name.nick});
+			var user = channel.members[ev.nick] || (channel.members[ev.nick] = {nick: ev.nick});
 			user.host = ev.host;
 			user.lastSeen = Date.now();
 		});
 
 		irc.on('notice', function (ev) {
-			var channel = this.channels[ev.target];
+			var channel = irc.getChannel(ev.target);
 			if (!channel) {return;}
 
-			var user = channel.users[name.nick] || (channel.users[name.nick] = {nick: name.nick});
+			var user = channel.members[ev.nick] || (channel.members[ev.nick] = {nick: ev.nick});
 			user.host = ev.host;
 			user.lastSeen = Date.now();
 		});
 
 		irc.on('mode:channel', function (ev) {
-			var channel = this.getChannel(ev.target);
+			var channel = irc.getChannel(ev.target);
+			if (!channel) return;
 
 			var i = ev.modes.length;
 			while (i-- > 0) {
 				var m = ev.modes[i];
 				switch (m.mode) {
 				case 'o':
-					channel.users[m.target].isOperator = m.delta;
+					channel.members[m.target].op = m.delta;
 					break;
 				case 'k':
-					channel.users[m.target].hasVoice = m.delta;
+					channel.members[m.target].voice = m.delta;
 					break;
 				}
 			}
 		});
 
 		irc.on('topic', function (ev) {
-			var channel = this.getChannel(ev.channel);
-			channel.topic = ev.topic;
+			var channel = irc.getChannel(ev.target);
+			if (!channel) return;
+
+			channel.topic = ev.message;
 			if (ev.nick) {
 				channel.topicBy = ev.nick;
 			}
 		});
 
 		irc.on('topic:time', function (ev) {
-			var channel = this.getChannel(ev.channel);
+			var channel = irc.getChannel(ev.target);
+			if (!channel) return;
 
 			channel.topicBy = ev.nick;
 			channel.topicSet = ev.time;
