@@ -1,6 +1,6 @@
 {
   "name": "ircsock",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Modular IRC client socket",
   "main": "index.js",
   "scripts": {
